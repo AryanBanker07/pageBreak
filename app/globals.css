@@ -1,26 +1,172 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/* ============================================================
+   PageBreak Detector — Swiss Design System
+   Monochrome + single accent (#0066FF)
+   ============================================================ */
+
+@theme {
+  --color-accent: #0066FF;
+  --color-accent-hover: #0052CC;
+  --color-accent-active: #003D99;
+  --color-surface: #FFFFFF;
+  --color-surface-alt: #F5F5F5;
+  --color-border: #E0E0E0;
+  --color-border-strong: #BDBDBD;
+  --color-text-primary: #111111;
+  --color-text-secondary: #666666;
+  --color-text-muted: #999999;
+  --color-danger: #D32F2F;
+  --color-success: #2E7D32;
+  --font-sans: "Inter", "SF Pro Display", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "SF Mono", "Fira Code", "Cascadia Code", monospace;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+/* ---------- Base ---------- */
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  color: var(--color-text-primary);
+  background-color: var(--color-surface);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  margin: 0;
+  min-height: 100vh;
+}
+
+/* ---------- Custom utilities ---------- */
+
+/* Drop zone dashed border animation */
+@keyframes dash-march {
+  to {
+    stroke-dashoffset: -12;
+  }
+}
+
+.dropzone-border {
+  border: 2px dashed var(--color-border-strong);
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.dropzone-border--active {
+  border-color: var(--color-accent);
+  background-color: rgba(0, 102, 255, 0.04);
+}
+
+/* Sensitivity slider track */
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 4px;
+  background: var(--color-border);
+  border-radius: 2px;
+  outline: none;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--color-accent);
+  cursor: pointer;
+  border: 2px solid var(--color-surface);
+  box-shadow: 0 0 0 1px var(--color-border);
+}
+
+input[type="range"]::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--color-accent);
+  cursor: pointer;
+  border: 2px solid var(--color-surface);
+  box-shadow: 0 0 0 1px var(--color-border);
+}
+
+/* Scrollbar styling */
+.preview-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+
+.preview-scroll::-webkit-scrollbar-track {
+  background: var(--color-surface-alt);
+}
+
+.preview-scroll::-webkit-scrollbar-thumb {
+  background: var(--color-border-strong);
+  border-radius: 3px;
+}
+
+.preview-scroll::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-muted);
+}
+
+/* Page break line in preview */
+.break-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--color-danger);
+  pointer-events: none;
+}
+
+.break-line::before {
+  content: attr(data-page);
+  position: absolute;
+  right: 4px;
+  top: -18px;
+  font-size: 10px;
+  font-family: var(--font-mono);
+  color: var(--color-danger);
+  background: var(--color-surface);
+  padding: 1px 4px;
+  border-radius: 2px;
+  line-height: 1.4;
+}
+
+/* Status badge */
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-family: var(--font-mono);
+  color: var(--color-text-secondary);
+  padding: 4px 8px;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  background: var(--color-surface-alt);
+}
+
+.status-badge::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-text-muted);
+}
+
+.status-badge--processing::before {
+  background: var(--color-accent);
+  animation: pulse-dot 1s ease-in-out infinite;
+}
+
+.status-badge--ready::before {
+  background: var(--color-success);
+}
+
+.status-badge--error::before {
+  background: var(--color-danger);
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
 }
