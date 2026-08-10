@@ -22,6 +22,7 @@ export default function Home() {
   const [statusMsg, setStatusMsg] = useState<string>('');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [totalHeight, setTotalHeight] = useState(0);
+  const [termsAccepted, setTermsAccepted] = useState(false);
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
@@ -233,18 +234,42 @@ export default function Home() {
                   perfectly paginated output.
                 </p>
               </div>
-              <DropZone onFile={handleFile} disabled={isProcessing} />
-              <div
-                className="mt-4 text-center text-[11px]"
-                style={{
-                  color: 'var(--color-text-muted)',
-                  fontFamily: 'var(--font-mono)',
-                }}
-              >
-                100% client-side · Your files never leave your device
+                <DropZone onFile={handleFile} disabled={isProcessing || !termsAccepted} />
+                
+                {/* Terms and Conditions */}
+                <div className="mt-6 text-left border rounded p-4 text-[11px] leading-relaxed" style={{ borderColor: 'var(--color-border)', backgroundColor: 'var(--color-surface-alt)', color: 'var(--color-text-secondary)' }}>
+                  <h3 className="font-semibold mb-2 text-xs" style={{ color: 'var(--color-text-primary)' }}>Terms and Conditions</h3>
+                  <p className="mb-2">
+                    By using this tool, you acknowledge and agree that <strong>YOU</strong> are solely responsible for any and all mistakes, bad page crops, sliced diagrams, lost data, failed homework assignments, or general life dissatisfaction resulting from the use of this free software.
+                  </p>
+                  <p className="mb-3">
+                    If a page break slices perfectly through your most important equation, that is entirely your fault for not reviewing the preview. We accept zero liability. The software is provided "as is", and any failure is definitively a "user error".
+                  </p>
+                  <label className="flex items-start gap-2 cursor-pointer group">
+                    <input 
+                      type="checkbox" 
+                      className="mt-0.5 cursor-pointer accent-[#0066FF]"
+                      checked={termsAccepted}
+                      onChange={(e) => setTermsAccepted(e.target.checked)}
+                      disabled={isProcessing}
+                    />
+                    <span className="font-medium group-hover:text-[#0066FF] transition-colors" style={{ color: termsAccepted ? 'var(--color-text-primary)' : 'var(--color-text-muted)' }}>
+                      I have read these terms and accept full blame for any mistakes.
+                    </span>
+                  </label>
+                </div>
+
+                <div
+                  className="mt-6 text-center text-[11px]"
+                  style={{
+                    color: 'var(--color-text-muted)',
+                    fontFamily: 'var(--font-mono)',
+                  }}
+                >
+                  100% client-side · Your files never leave your device
+                </div>
               </div>
-            </div>
-          )}
+            )}
 
           {/* Workspace — shown after file upload */}
           {state !== 'idle' && (

@@ -9,6 +9,8 @@
 
 import type { PDFDocumentProxy } from 'pdfjs-dist';
 
+import { isRowEmpty } from './whitespaceDetector';
+
 // We dynamically import pdfjs-dist to avoid SSR issues in Next.js
 let pdfjsLib: typeof import('pdfjs-dist') | null = null;
 
@@ -31,6 +33,10 @@ export interface RenderResult {
 
 /**
  * Render all pages of a PDF into a single vertically-stitched canvas.
+ * 
+ * To fix Apple Notes slicing artifacts, this function strips all empty
+ * top/bottom margins from each page before stacking them with 0px gap.
+ * This perfectly rejoins handwriting or images that were sliced exactly in half.
  */
 async function renderPdf(
   arrayBuffer: ArrayBuffer,
@@ -44,42 +50,24 @@ async function renderPdf(
 
   onProgress?.(`Loaded PDF with ${numPages} page(s)`);
 
-  // First pass: measure all pages to know the composite dimensions
-  const pageDims: { w: number; h: number }[] = [];
+  const croppedPages: { canvas: HTMLCanvasElement; width: number; height: number }[] = [];
   let totalHeight = 0;
   let maxWidth = 0;
 
   for (let i = 1; i <= numPages; i++) {
-    const page = await pdf.getPage(i);
-    const viewport = page.getViewport({ scale });
-    pageDims.push({ w: viewport.width, h: viewport.height });
-    totalHeight += viewport.height;
-    maxWidth = Math.max(maxWidth, viewport.width);
-  }
-
-  // Create the composite canvas
-  const canvas = document.createElement('canvas');
-  canvas.width = maxWidth;
-  canvas.height = totalHeight;
-  const ctx = canvas.getContext('2d')!;
-
-  // Fill white background
-  ctx.fillStyle = '#FFFFFF';
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-  // Second pass: render each page onto the composite canvas
-  let yOffset = 0;
-  for (let i = 1; i <= numPages; i++) {
-    onProgress?.(`Rendering page ${i} / ${numPages}`);
+    onProgress?.(`Rendering & scanning page ${i} / ${numPages}`);
 
     const page = await pdf.getPage(i);
     const viewport = page.getViewport({ scale });
 
-    // Render to a temporary canvas first
     const tempCanvas = document.createElement('canvas');
     tempCanvas.width = viewport.width;
     tempCanvas.height = viewport.height;
     const tempCtx = tempCanvas.getContext('2d')!;
+
+    // Fill white background to avoid transparent alpha issues during scan
+    tempCtx.fillStyle = '#FFFFFF';
+    tempCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
 
     await page.render({
       canvasContext: tempCtx,
@@ -87,15 +75,65 @@ async function renderPdf(
       viewport,
     }).promise;
 
-    // Draw the temp canvas onto the composite at the current y offset
-    // Center horizontally if this page is narrower than max
-    const xOffset = Math.floor((maxWidth - viewport.width) / 2);
-    ctx.drawImage(tempCanvas, xOffset, yOffset);
+    // Scan for content boundaries (crop margins)
+    const imageData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
+    const width = tempCanvas.width;
+    const height = tempCanvas.height;
+    const sampleStep = width > 2000 ? 2 : 1;
 
-    yOffset += viewport.height;
+    let contentTop = 0;
+    while (contentTop < height && isRowEmpty(imageData, contentTop, width, sampleStep)) {
+      contentTop++;
+    }
+
+    let contentBottom = height - 1;
+    while (contentBottom > contentTop && isRowEmpty(imageData, contentBottom, width, sampleStep)) {
+      contentBottom--;
+    }
+
+    // Skip entirely empty pages
+    if (contentTop >= height) {
+      continue;
+    }
+
+    const croppedHeight = contentBottom - contentTop + 1;
+
+    const croppedCanvas = document.createElement('canvas');
+    croppedCanvas.width = width;
+    croppedCanvas.height = croppedHeight;
+    const croppedCtx = croppedCanvas.getContext('2d')!;
+    
+    // Draw only the cropped region
+    croppedCtx.drawImage(
+      tempCanvas,
+      0, contentTop, width, croppedHeight,
+      0, 0, width, croppedHeight
+    );
+
+    croppedPages.push({ canvas: croppedCanvas, width, height: croppedHeight });
+    totalHeight += croppedHeight;
+    maxWidth = Math.max(maxWidth, width);
   }
 
-  return { canvas, width: maxWidth, height: totalHeight };
+  onProgress?.(`Stitching ${croppedPages.length} pages seamlessly...`);
+
+  // Create the final composite canvas
+  const compositeCanvas = document.createElement('canvas');
+  compositeCanvas.width = maxWidth;
+  compositeCanvas.height = totalHeight;
+  const compositeCtx = compositeCanvas.getContext('2d')!;
+
+  compositeCtx.fillStyle = '#FFFFFF';
+  compositeCtx.fillRect(0, 0, compositeCanvas.width, compositeCanvas.height);
+
+  let yOffset = 0;
+  for (const cp of croppedPages) {
+    const xOffset = Math.floor((maxWidth - cp.width) / 2);
+    compositeCtx.drawImage(cp.canvas, xOffset, yOffset);
+    yOffset += cp.height;
+  }
+
+  return { canvas: compositeCanvas, width: maxWidth, height: totalHeight };
 }
 
 /**

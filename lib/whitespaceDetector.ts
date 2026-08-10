@@ -140,6 +140,31 @@ function rowOutlierFraction(
 }
 
 /**
+ * Determines if a single row is "empty" (pure background) based on
+ * its luminance variance and outlier pixel fraction.
+ */
+export function isRowEmpty(
+  imageData: ImageData,
+  y: number,
+  width: number,
+  sampleStep: number = 1,
+  varianceThreshold: number = DEFAULT_VARIANCE_THRESHOLD
+): boolean {
+  const maxOutlierFraction = 0.02; // 2%
+
+  const variance = rowVariance(imageData, y, width, sampleStep);
+  let empty = variance < varianceThreshold;
+
+  // Secondary check for borderline rows
+  if (empty && variance > varianceThreshold * 0.3) {
+    const outlierFrac = rowOutlierFraction(imageData, y, width, sampleStep);
+    empty = outlierFrac < maxOutlierFraction;
+  }
+
+  return empty;
+}
+
+/**
  * Find all empty (background-only) zones in the canvas.
  *
  * A zone is a run of consecutive rows where:
@@ -160,9 +185,6 @@ export function findWhitespaceZones(
   // Choose sampling step based on width: for wide canvases, sample every 2nd pixel
   const sampleStep = width > 2000 ? 2 : 1;
 
-  // Maximum outlier fraction for a row to be considered empty
-  const maxOutlierFraction = 0.02; // 2%
-
   const CHUNK_HEIGHT = 512;
   const zones: WhitespaceZone[] = [];
   let currentRunStart: number | null = null;
@@ -173,18 +195,7 @@ export function findWhitespaceZones(
 
     for (let localY = 0; localY < chunkH; localY++) {
       const globalY = chunkY + localY;
-
-      // Primary check: row variance
-      const variance = rowVariance(imageData, localY, width, sampleStep);
-
-      let isEmpty = variance < varianceThreshold;
-
-      // Secondary check for borderline rows: outlier fraction
-      // Only needed if variance is moderate (not clearly empty or clearly content)
-      if (isEmpty && variance > varianceThreshold * 0.3) {
-        const outlierFrac = rowOutlierFraction(imageData, localY, width, sampleStep);
-        isEmpty = outlierFrac < maxOutlierFraction;
-      }
+      const isEmpty = isRowEmpty(imageData, localY, width, sampleStep, varianceThreshold);
 
       if (isEmpty) {
         if (currentRunStart === null) {
