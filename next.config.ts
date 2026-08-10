@@ -1,6 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  output: 'export',
   turbopack: {},
   webpack: (config) => {
     // Fallback for webpack mode — disable canvas polyfill for pdfjs-dist
