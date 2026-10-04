@@ -95,3 +95,12 @@ Rewrote `whitespaceDetector.ts` to use **variance-based row uniformity**:
 - **Linting**: Fixed unescaped HTML entities in `page.tsx` and unused variables in `PreviewPanel.tsx`.
 - **Deployment Testing**: Verified the production build passes successfully with zero errors (`npm run build`).
 
+---
+
+## 2026-10-04 — Vercel Deployment Preparation & Push
+
+### Completed
+- **Build Verification**: Ran clean production build (`npm run build`) with TypeScript verification passing 100%.
+- **Git Push**: Staged all pending code changes (dark mode, manual break dragging, canvas memory fix, FAQ component) and pushed commit `e2d6cd0` to `origin/master` (`https://github.com/AryanBanker07/pageBreak.git`).
+- **Vercel CLI Setup**: Initiated CLI login/deployment flow via `npx vercel` awaiting user browser authorization.
+
