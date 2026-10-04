@@ -17,17 +17,18 @@ import {
   PAGE_MARGIN_PT,
   type PageSize,
   type BreakPoint,
+  type RenderResult,
 } from './types';
 
 /**
  * Extract a horizontal slice from the composite canvas as a PNG data URL.
  */
 function extractSlice(
-  sourceCanvas: HTMLCanvasElement,
+  renderResult: RenderResult,
   startY: number,
   endY: number
 ): string {
-  const width = sourceCanvas.width;
+  const width = renderResult.width;
   const sliceHeight = endY - startY;
 
   const sliceCanvas = document.createElement('canvas');
@@ -39,18 +40,17 @@ function extractSlice(
   ctx.fillStyle = '#FFFFFF';
   ctx.fillRect(0, 0, width, sliceHeight);
 
-  // Draw the slice from the source
-  ctx.drawImage(
-    sourceCanvas,
-    0,
-    startY,
-    width,
-    sliceHeight,
-    0,
-    0,
-    width,
-    sliceHeight
-  );
+  // Draw overlapping pages
+  for (const page of renderResult.pages) {
+    const pageTop = page.yOffset;
+    const pageBottom = page.yOffset + page.height;
+
+    if (pageBottom > startY && pageTop < endY) {
+      const drawY = pageTop - startY;
+      const drawX = Math.floor((width - page.width) / 2);
+      ctx.drawImage(page.canvas, drawX, drawY);
+    }
+  }
 
   return sliceCanvas.toDataURL('image/png');
 }
@@ -72,7 +72,7 @@ function dataUrlToBytes(dataUrl: string): Uint8Array {
  * Compose a paginated PDF from the composite canvas and break points.
  */
 export async function composePdf(
-  canvas: HTMLCanvasElement,
+  renderResult: RenderResult,
   breakPoints: BreakPoint[],
   pageSize: PageSize,
   onProgress?: (msg: string) => void
@@ -81,7 +81,7 @@ export async function composePdf(
   const dims = PAGE_SIZES[pageSize];
 
   // Build the list of vertical slices
-  const sliceYs = [0, ...breakPoints.map((bp) => bp.y), canvas.height];
+  const sliceYs = [0, ...breakPoints.map((bp) => bp.y), renderResult.height];
   const totalPages = sliceYs.length - 1;
 
   for (let i = 0; i < totalPages; i++) {
@@ -94,7 +94,7 @@ export async function composePdf(
     onProgress?.(`Composing page ${i + 1} / ${totalPages}`);
 
     // Extract the slice as PNG
-    const pngDataUrl = extractSlice(canvas, startY, endY);
+    const pngDataUrl = extractSlice(renderResult, startY, endY);
     const pngBytes = dataUrlToBytes(pngDataUrl);
     const pngImage = await pdfDoc.embedPng(pngBytes);
 
@@ -103,7 +103,7 @@ export async function composePdf(
     const usableHeight = dims.heightPt - 2 * PAGE_MARGIN_PT;
 
     // Scale the image to fit the usable width
-    const scaleX = usableWidth / canvas.width;
+    const scaleX = usableWidth / renderResult.width;
     const scaledHeight = sliceHeight * scaleX;
 
     // If the scaled height exceeds usable height, scale down further
@@ -112,7 +112,7 @@ export async function composePdf(
         ? Math.min(scaleX, usableHeight / sliceHeight)
         : scaleX;
 
-    const finalWidth = canvas.width * finalScale;
+    const finalWidth = renderResult.width * finalScale;
     const finalHeight = sliceHeight * finalScale;
 
     // Create a page

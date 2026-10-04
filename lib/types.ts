@@ -35,6 +35,19 @@ export interface WhitespaceZone {
   height: number;
 }
 
+export interface RenderedPage {
+  canvas: HTMLCanvasElement;
+  width: number;
+  height: number;
+  yOffset: number; // Global Y offset in the stitched view
+}
+
+export interface RenderResult {
+  pages: RenderedPage[];
+  width: number;
+  height: number;
+}
+
 export type ProcessingState =
   | 'idle'
   | 'loading'
@@ -48,11 +61,9 @@ export type ProcessingState =
 export interface AppState {
   processingState: ProcessingState;
   fileName: string | null;
-  compositeCanvas: HTMLCanvasElement | null;
+  renderResult: RenderResult | null;
   breakPoints: BreakPoint[];
   pageSize: PageSize;
   sensitivity: number; // min whitespace height in px
   errorMessage: string | null;
-  totalHeight: number;
-  totalWidth: number;
 }

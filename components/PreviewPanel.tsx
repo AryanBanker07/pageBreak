@@ -1,12 +1,12 @@
 'use client';
 
-import React, { useRef, useEffect, useMemo } from 'react';
-import type { BreakPoint } from '@/lib/types';
+import React, { useRef, useEffect, useMemo, useState } from 'react';
+import type { BreakPoint, RenderResult } from '@/lib/types';
 
 interface PreviewPanelProps {
-  canvas: HTMLCanvasElement | null;
+  renderResult: RenderResult | null;
   breakPoints: BreakPoint[];
-  totalHeight: number;
+  onUpdateBreak?: (index: number, newY: number) => void;
 }
 
 /**
@@ -14,36 +14,74 @@ interface PreviewPanelProps {
  * Renders the canvas image scaled to fit, with red break lines overlaid.
  */
 export default function PreviewPanel({
-  canvas,
+  renderResult,
   breakPoints,
-  totalHeight,
+  onUpdateBreak,
 }: PreviewPanelProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const previewCanvasRef = useRef<HTMLCanvasElement>(null);
+  
+  const [draggingIndex, setDraggingIndex] = useState<number | null>(null);
+  const dragStartRef = useRef<{ clientY: number; startY: number } | null>(null);
 
-  // Generate a scaled-down preview image
-  const previewDataUrl = useMemo(() => {
-    if (!canvas) return null;
-    // Scale to a reasonable preview width (max 600px)
-    const maxW = 600;
-    const scale = Math.min(1, maxW / canvas.width);
-    const w = Math.floor(canvas.width * scale);
-    const h = Math.floor(canvas.height * scale);
+  const globalScale = useMemo(() => {
+    if (!renderResult) return 1;
+    return Math.min(1, 600 / renderResult.width);
+  }, [renderResult]);
 
-    const preview = document.createElement('canvas');
-    preview.width = w;
-    preview.height = h;
-    const ctx = preview.getContext('2d')!;
-    ctx.drawImage(canvas, 0, 0, w, h);
-    return { url: preview.toDataURL('image/png'), width: w, height: h, scale };
-  }, [canvas]);
+  // Generate scaled-down preview images
+  const previewPages = useMemo(() => {
+    if (!renderResult) return null;
+    
+    return renderResult.pages.map(page => {
+      const w = Math.floor(page.width * globalScale);
+      const h = Math.floor(page.height * globalScale);
+      
+      const preview = document.createElement('canvas');
+      preview.width = w;
+      preview.height = h;
+      const ctx = preview.getContext('2d')!;
+      ctx.drawImage(page.canvas, 0, 0, w, h);
+      
+      return {
+        url: preview.toDataURL('image/jpeg', 0.85),
+        width: w,
+        height: h,
+        yOffset: Math.floor(page.yOffset * globalScale),
+        xOffset: Math.floor(((renderResult.width - page.width) / 2) * globalScale)
+      };
+    });
+  }, [renderResult, globalScale]);
 
   // Scroll to top when new content loads
   useEffect(() => {
     containerRef.current?.scrollTo(0, 0);
-  }, [previewDataUrl]);
+  }, [previewPages]);
 
-  if (!canvas || !previewDataUrl) {
+  // Handle global mouse events for dragging
+  useEffect(() => {
+    if (draggingIndex === null || !renderResult || !onUpdateBreak) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!dragStartRef.current) return;
+      const dy = e.clientY - dragStartRef.current.clientY;
+      const newY = dragStartRef.current.startY + dy / globalScale;
+      onUpdateBreak(draggingIndex, newY);
+    };
+
+    const handleMouseUp = () => {
+      setDraggingIndex(null);
+      dragStartRef.current = null;
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [draggingIndex, renderResult, globalScale, onUpdateBreak]);
+
+  if (!renderResult || !previewPages) {
     return (
       <div
         className="flex items-center justify-center rounded-md h-full min-h-[300px]"
@@ -96,31 +134,59 @@ export default function PreviewPanel({
         }}
       >
         <span>{breakPoints.length + 1} page(s)</span>
-        <span>{totalHeight.toLocaleString()}px total</span>
+        <span>{renderResult.height.toLocaleString()}px total</span>
       </div>
 
       {/* Document preview with break lines */}
-      <div className="relative mx-auto" style={{ width: previewDataUrl.width }}>
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={previewDataUrl.url}
-          alt="Document preview"
-          width={previewDataUrl.width}
-          height={previewDataUrl.height}
-          className="block"
-          style={{ imageRendering: 'auto' }}
-        />
+      <div 
+        className="relative mx-auto bg-white" 
+        style={{ 
+          width: Math.floor(renderResult.width * globalScale), 
+          height: Math.floor(renderResult.height * globalScale) 
+        }}
+      >
+        {previewPages.map((page, i) => (
+          /* eslint-disable-next-line @next/next/no-img-element */
+          <img
+            key={i}
+            src={page.url}
+            alt={`Page ${i + 1} preview`}
+            width={page.width}
+            height={page.height}
+            className="absolute"
+            style={{ 
+              top: `${page.yOffset}px`,
+              left: `${page.xOffset}px`,
+              imageRendering: 'auto' 
+            }}
+          />
+        ))}
 
         {/* Break lines */}
         {breakPoints.map((bp, i) => {
-          const scaledY = Math.floor(bp.y * previewDataUrl.scale);
+          const scaledY = Math.floor(bp.y * globalScale);
+          const isDragging = draggingIndex === i;
           return (
             <div
               key={i}
-              className="break-line"
-              style={{ top: `${scaledY}px` }}
+              className={`break-line ${isDragging ? 'z-20' : ''}`}
+              style={{ 
+                top: `${scaledY}px`,
+                backgroundColor: isDragging ? 'var(--color-accent)' : 'var(--color-danger)'
+              }}
               data-page={`p${i + 2}`}
-            />
+              onMouseDown={(e) => {
+                if (!onUpdateBreak) return;
+                e.preventDefault();
+                setDraggingIndex(i);
+                dragStartRef.current = { clientY: e.clientY, startY: bp.y };
+              }}
+            >
+              {/* Optional handle visual indicator */}
+              <div className="absolute left-1/2 -translate-x-1/2 -top-1 w-8 h-2.5 rounded bg-black/10 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity pointer-events-none">
+                <div className="w-4 h-0.5 bg-white/50 rounded-full" />
+              </div>
+            </div>
           );
         })}
       </div>

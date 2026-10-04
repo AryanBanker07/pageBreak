@@ -8,8 +8,8 @@
  */
 
 import type { PDFDocumentProxy } from 'pdfjs-dist';
-
 import { isRowEmpty } from './whitespaceDetector';
+import type { RenderResult, RenderedPage } from './types';
 
 // We dynamically import pdfjs-dist to avoid SSR issues in Next.js
 let pdfjsLib: typeof import('pdfjs-dist') | null = null;
@@ -25,11 +25,7 @@ async function getPdfjs() {
   return pdfjsLib;
 }
 
-export interface RenderResult {
-  canvas: HTMLCanvasElement;
-  width: number;
-  height: number;
-}
+
 
 /**
  * Render all pages of a PDF into a single vertically-stitched canvas.
@@ -50,7 +46,7 @@ async function renderPdf(
 
   onProgress?.(`Loaded PDF with ${numPages} page(s)`);
 
-  const croppedPages: { canvas: HTMLCanvasElement; width: number; height: number }[] = [];
+  const pages: RenderedPage[] = [];
   let totalHeight = 0;
   let maxWidth = 0;
 
@@ -110,30 +106,14 @@ async function renderPdf(
       0, 0, width, croppedHeight
     );
 
-    croppedPages.push({ canvas: croppedCanvas, width, height: croppedHeight });
+    pages.push({ canvas: croppedCanvas, width, height: croppedHeight, yOffset: totalHeight });
     totalHeight += croppedHeight;
     maxWidth = Math.max(maxWidth, width);
   }
 
-  onProgress?.(`Stitching ${croppedPages.length} pages seamlessly...`);
+  onProgress?.(`Successfully processed ${pages.length} pages.`);
 
-  // Create the final composite canvas
-  const compositeCanvas = document.createElement('canvas');
-  compositeCanvas.width = maxWidth;
-  compositeCanvas.height = totalHeight;
-  const compositeCtx = compositeCanvas.getContext('2d')!;
-
-  compositeCtx.fillStyle = '#FFFFFF';
-  compositeCtx.fillRect(0, 0, compositeCanvas.width, compositeCanvas.height);
-
-  let yOffset = 0;
-  for (const cp of croppedPages) {
-    const xOffset = Math.floor((maxWidth - cp.width) / 2);
-    compositeCtx.drawImage(cp.canvas, xOffset, yOffset);
-    yOffset += cp.height;
-  }
-
-  return { canvas: compositeCanvas, width: maxWidth, height: totalHeight };
+  return { pages, width: maxWidth, height: totalHeight };
 }
 
 /**
@@ -164,7 +144,11 @@ async function renderImage(
 
       URL.revokeObjectURL(url);
       onProgress?.(`Image loaded: ${img.naturalWidth}×${img.naturalHeight}`);
-      resolve({ canvas, width: img.naturalWidth, height: img.naturalHeight });
+      resolve({ 
+        pages: [{ canvas, width: img.naturalWidth, height: img.naturalHeight, yOffset: 0 }], 
+        width: img.naturalWidth, 
+        height: img.naturalHeight 
+      });
     };
     img.onerror = () => {
       URL.revokeObjectURL(url);

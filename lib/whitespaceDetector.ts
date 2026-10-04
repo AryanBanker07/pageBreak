@@ -33,6 +33,7 @@ import {
   type PageSize,
   type BreakPoint,
   type WhitespaceZone,
+  type RenderResult,
 } from './types';
 
 /**
@@ -174,13 +175,12 @@ export function isRowEmpty(
  * Both conditions must hold for a row to be "empty."
  */
 export function findWhitespaceZones(
-  canvas: HTMLCanvasElement,
+  renderResult: RenderResult,
   minHeight: number = 10,
   varianceThreshold: number = DEFAULT_VARIANCE_THRESHOLD
 ): WhitespaceZone[] {
-  const ctx = canvas.getContext('2d')!;
-  const width = canvas.width;
-  const height = canvas.height;
+  const width = renderResult.width;
+  const height = renderResult.height;
 
   // Choose sampling step based on width: for wide canvases, sample every 2nd pixel
   const sampleStep = width > 2000 ? 2 : 1;
@@ -191,7 +191,28 @@ export function findWhitespaceZones(
 
   for (let chunkY = 0; chunkY < height; chunkY += CHUNK_HEIGHT) {
     const chunkH = Math.min(CHUNK_HEIGHT, height - chunkY);
-    const imageData = ctx.getImageData(0, chunkY, width, chunkH);
+    
+    // Create a temporary canvas for this chunk to stitch overlapping pages
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = width;
+    tempCanvas.height = chunkH;
+    const tempCtx = tempCanvas.getContext('2d')!;
+    tempCtx.fillStyle = '#FFFFFF';
+    tempCtx.fillRect(0, 0, width, chunkH);
+
+    for (const page of renderResult.pages) {
+      const pageTop = page.yOffset;
+      const pageBottom = page.yOffset + page.height;
+      const chunkBottom = chunkY + chunkH;
+
+      if (pageBottom > chunkY && pageTop < chunkBottom) {
+        const drawY = pageTop - chunkY;
+        const drawX = Math.floor((width - page.width) / 2);
+        tempCtx.drawImage(page.canvas, drawX, drawY);
+      }
+    }
+
+    const imageData = tempCtx.getImageData(0, 0, width, chunkH);
 
     for (let localY = 0; localY < chunkH; localY++) {
       const globalY = chunkY + localY;
@@ -261,28 +282,28 @@ function getPageHeightInPx(
  * at the target height (last resort — may clip content).
  */
 export function detectPageBreaks(
-  canvas: HTMLCanvasElement,
+  renderResult: RenderResult,
   pageSize: PageSize,
   sensitivity: number = 10, // min empty-zone height in px
   onProgress?: (msg: string) => void
 ): BreakPoint[] {
   onProgress?.('Scanning for empty zones (color-agnostic)...');
 
-  const zones = findWhitespaceZones(canvas, sensitivity);
-  const pageHeightPx = getPageHeightInPx(canvas.width, pageSize);
+  const zones = findWhitespaceZones(renderResult, sensitivity);
+  const pageHeightPx = getPageHeightInPx(renderResult.width, pageSize);
   const breaks: BreakPoint[] = [];
 
   onProgress?.(
     `Found ${zones.length} empty zone(s). Page height: ${pageHeightPx}px`
   );
 
-  if (canvas.height <= pageHeightPx) {
+  if (renderResult.height <= pageHeightPx) {
     return [];
   }
 
   let currentY = 0;
 
-  while (currentY + pageHeightPx < canvas.height) {
+  while (currentY + pageHeightPx < renderResult.height) {
     const targetY = currentY + pageHeightPx;
 
     // Look for zones whose midpoint is closest to targetY,

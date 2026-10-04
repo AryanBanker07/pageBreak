@@ -7,24 +7,24 @@ import SensitivitySlider from '@/components/SensitivitySlider';
 import PageSizeToggle from '@/components/PageSizeToggle';
 import DownloadButton from '@/components/DownloadButton';
 import AdSlot from '@/components/AdSlot';
+import FAQ from '@/components/FAQ';
 import { renderFileToCanvas } from '@/lib/pdfRenderer';
 import { detectPageBreaks } from '@/lib/whitespaceDetector';
 import { composePdf, downloadPdf } from '@/lib/pdfComposer';
-import type { PageSize, BreakPoint, ProcessingState } from '@/lib/types';
+import type { PageSize, BreakPoint, ProcessingState, RenderResult } from '@/lib/types';
 
 export default function Home() {
   const [state, setState] = useState<ProcessingState>('idle');
   const [fileName, setFileName] = useState<string | null>(null);
-  const [canvas, setCanvas] = useState<HTMLCanvasElement | null>(null);
+  const [renderResult, setRenderResult] = useState<RenderResult | null>(null);
   const [breakPoints, setBreakPoints] = useState<BreakPoint[]>([]);
   const [pageSize, setPageSize] = useState<PageSize>('A4');
   const [sensitivity, setSensitivity] = useState<number>(15);
   const [statusMsg, setStatusMsg] = useState<string>('');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [totalHeight, setTotalHeight] = useState(0);
   const [termsAccepted, setTermsAccepted] = useState(false);
 
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const renderResultRef = useRef<RenderResult | null>(null);
 
   // ---- File upload handler ----
   const handleFile = useCallback(
@@ -38,15 +38,14 @@ export default function Home() {
         const result = await renderFileToCanvas(file, (msg) =>
           setStatusMsg(msg)
         );
-        canvasRef.current = result.canvas;
-        setCanvas(result.canvas);
-        setTotalHeight(result.height);
+        renderResultRef.current = result;
+        setRenderResult(result);
 
         setState('scanning');
         setStatusMsg('Detecting page breaks…');
 
         const breaks = detectPageBreaks(
-          result.canvas,
+          result,
           pageSize,
           sensitivity,
           (msg) => setStatusMsg(msg)
@@ -71,7 +70,7 @@ export default function Home() {
   // ---- Re-scan when sensitivity or page size changes ----
   const reScan = useCallback(
     (newSensitivity: number, newPageSize: PageSize) => {
-      if (!canvasRef.current) return;
+      if (!renderResultRef.current) return;
 
       setState('scanning');
       setStatusMsg('Re-scanning…');
@@ -80,7 +79,7 @@ export default function Home() {
       requestAnimationFrame(() => {
         try {
           const breaks = detectPageBreaks(
-            canvasRef.current!,
+            renderResultRef.current!,
             newPageSize,
             newSensitivity,
             (msg) => setStatusMsg(msg)
@@ -117,16 +116,35 @@ export default function Home() {
     [sensitivity, reScan]
   );
 
+  // ---- Update break handler ----
+  const handleUpdateBreak = useCallback((index: number, newY: number) => {
+    setBreakPoints((prev) => {
+      const newBreaks = [...prev];
+      const bp = newBreaks[index];
+      const min = index === 0 ? 0 : newBreaks[index - 1].y + 10;
+      
+      const totalH = renderResultRef.current?.height ?? 0;
+      const max = index === newBreaks.length - 1 ? totalH : newBreaks[index + 1].y - 10;
+      
+      newBreaks[index] = {
+        ...bp,
+        y: Math.max(min, Math.min(max, newY))
+      };
+      
+      return newBreaks;
+    });
+  }, []);
+
   // ---- Download handler ----
   const handleDownload = useCallback(async () => {
-    if (!canvasRef.current) return;
+    if (!renderResultRef.current) return;
 
     try {
       setState('composing');
       setStatusMsg('Composing final PDF…');
 
       const pdfBytes = await composePdf(
-        canvasRef.current,
+        renderResultRef.current,
         breakPoints,
         pageSize,
         (msg) => setStatusMsg(msg)
@@ -243,7 +261,7 @@ export default function Home() {
                     By using this tool, you acknowledge and agree that <strong>YOU</strong> are solely responsible for any and all mistakes, bad page crops, sliced diagrams, lost data, failed homework assignments, or general life dissatisfaction resulting from the use of this free software.
                   </p>
                   <p className="mb-3">
-                    If a page break slices perfectly through your most important equation, that is entirely your fault for not reviewing the preview. We accept zero liability. The software is provided "as is", and any failure is definitively a "user error".
+                    If a page break slices perfectly through your most important equation, that is entirely your fault for not reviewing the preview. We accept zero liability. The software is provided &quot;as is&quot;, and any failure is definitively a &quot;user error&quot;.
                   </p>
                   <label className="flex items-start gap-2 cursor-pointer group">
                     <input 
@@ -301,9 +319,9 @@ export default function Home() {
 
                 {/* Preview panel */}
                 <PreviewPanel
-                  canvas={canvas}
+                  renderResult={renderResult}
                   breakPoints={breakPoints}
-                  totalHeight={totalHeight}
+                  onUpdateBreak={handleUpdateBreak}
                 />
               </div>
 
@@ -369,41 +387,7 @@ export default function Home() {
         
         {/* ===== SEO FAQ SECTION (Shown only when idle) ===== */}
         {state === 'idle' && (
-          <div className="max-w-[800px] mx-auto mt-24 mb-12">
-            <h2 
-              className="text-xl font-semibold mb-6"
-              style={{ color: 'var(--color-text-primary)' }}
-            >
-              Frequently Asked Questions
-            </h2>
-            
-            <div className="space-y-6">
-              <div>
-                <h3 className="font-medium text-sm mb-1" style={{ color: 'var(--color-text-primary)' }}>Why does Apple Notes cut through my handwriting when exporting to PDF?</h3>
-                <p className="text-sm leading-relaxed" style={{ color: 'var(--color-text-secondary)' }}>Apple Notes exports handwritten content as a continuous document and inserts page breaks at fixed intervals without analyzing the content. This often results in text, drawings, and images being sliced in half at page boundaries. PageBreak fixes this by intelligently detecting whitespace gaps between your content lines.</p>
-              </div>
-              
-              <div>
-                <h3 className="font-medium text-sm mb-1" style={{ color: 'var(--color-text-primary)' }}>Is my data safe? Does PageBreak upload my files?</h3>
-                <p className="text-sm leading-relaxed" style={{ color: 'var(--color-text-secondary)' }}>Yes, your data is completely safe. PageBreak processes everything 100% in your browser using client-side JavaScript. Your PDF and image files are never uploaded to any server. No data ever leaves your device.</p>
-              </div>
-              
-              <div>
-                <h3 className="font-medium text-sm mb-1" style={{ color: 'var(--color-text-primary)' }}>What file formats does PageBreak support?</h3>
-                <p className="text-sm leading-relaxed" style={{ color: 'var(--color-text-secondary)' }}>PageBreak accepts PDF files and image formats including PNG, JPG/JPEG, and WebP. You can upload a multi-page continuous PDF exported from Apple Notes, or a long screenshot of your handwritten notes.</p>
-              </div>
-              
-              <div>
-                <h3 className="font-medium text-sm mb-1" style={{ color: 'var(--color-text-primary)' }}>Does PageBreak work with dark mode or colored backgrounds?</h3>
-                <p className="text-sm leading-relaxed" style={{ color: 'var(--color-text-secondary)' }}>Yes. PageBreak uses a color-agnostic variance-based detection algorithm that works with any text color on any background color, including dark mode notes, colored stationery, and documents with embedded images.</p>
-              </div>
-              
-              <div>
-                <h3 className="font-medium text-sm mb-1" style={{ color: 'var(--color-text-primary)' }}>Is PageBreak free to use?</h3>
-                <p className="text-sm leading-relaxed" style={{ color: 'var(--color-text-secondary)' }}>Yes, PageBreak is completely free. There are no usage limits, no sign-up required, and no watermarks on the output PDF.</p>
-              </div>
-            </div>
-          </div>
+          <FAQ />
         )}
       </main>
 

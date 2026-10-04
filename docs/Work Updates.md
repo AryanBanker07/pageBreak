@@ -83,3 +83,15 @@ Rewrote `whitespaceDetector.ts` to use **variance-based row uniformity**:
 - **Crawler Control**: Added auto-generated `sitemap.ts` and `robots.ts`.
 - **Semantic Content**: Added an on-page FAQ section to the landing page (shown when idle) to match the structured data and provide rich text for search indexing.
 
+---
+
+## 2026-10-04 — Architecture, UX, and Memory Limit Fixes
+
+### Completed
+- **Manual Break Adjustments**: Implemented drag-and-drop mechanism in `PreviewPanel.tsx` allowing users to manually drag page break lines up and down to adjust them.
+- **Dark Mode Support**: Added `prefers-color-scheme: dark` media queries to `globals.css` with a full suite of CSS variables, ensuring the UI supports system-wide dark mode out of the box.
+- **Canvas Memory Limit Fix**: Completely overhauled `pdfRenderer.ts`, `whitespaceDetector.ts`, and `PreviewPanel.tsx` to stop stitching large PDFs into a single massive canvas, which previously crashed mobile Safari due to its 4096px height limit. The app now seamlessly handles an array of individual pages (`RenderResult`), resolving memory issues and crashes on iOS/iPad devices.
+- **Component Separation**: Extracted the FAQ section into `components/FAQ.tsx` to declutter the monolithic `app/page.tsx` file.
+- **Linting**: Fixed unescaped HTML entities in `page.tsx` and unused variables in `PreviewPanel.tsx`.
+- **Deployment Testing**: Verified the production build passes successfully with zero errors (`npm run build`).
+
