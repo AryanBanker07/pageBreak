@@ -188,11 +188,13 @@ export default function Home() {
 
   return (
     <div
+      id="app-root"
       className="min-h-screen flex flex-col"
       style={{ backgroundColor: 'var(--color-surface)' }}
     >
       {/* ===== HEADER ===== */}
       <header
+        id="app-header"
         className="px-6 py-4"
         style={{ borderBottom: '1px solid var(--color-border)' }}
       >
@@ -231,11 +233,11 @@ export default function Home() {
       </div>
 
       {/* ===== MAIN WORKSPACE ===== */}
-      <main className="flex-1 px-6 py-6">
+      <main id="main-content" className="flex-1 px-6 py-6">
         <div className="max-w-[1200px] mx-auto">
           {/* Upload zone — shown prominently when idle */}
           {state === 'idle' && (
-            <div className="max-w-[600px] mx-auto py-8">
+            <section id="upload-section" className="max-w-[600px] mx-auto py-8">
               <div className="text-center mb-6">
                 <h2
                   className="text-2xl font-semibold tracking-tight mb-2"
